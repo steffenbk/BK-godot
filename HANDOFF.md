@@ -68,6 +68,16 @@ Linux side of step 5.
    - Record mesh rebuild ms, collision rebuild ms, frame time. **Set numeric pass/fail bars and a
      deadline before starting.** If they're missed, reassess rather than drift.
 
+## Session 2026-11-17 (cloud) results
+
+- First CI run on `bk/4.7` queued (run #1, includes the Windows jobs). If the Windows jobs pass, the
+  Windows build is verified by CI, and steps 2 and 3 only need the owner for running the editor locally.
+- Step 4 drafted: `docs/framework-spec.md` (draft 1, needs owner review; open decisions in §10).
+- **New constraint for step 5:** Voxel Tools' built-in multiplayer works only with fixed-LOD
+  `VoxelTerrain`, which caps view distance at ~512 voxels on unbounded maps. `VoxelLodTerrain` has no
+  network sync. The tech test must compare a hybrid (heightmap far + voxel near) against
+  `VoxelLodTerrain` with our own sync. Spec §7 proposes starting phase 1 on a small bounded map.
+
 ## Open questions for the owner
 
 - Licence for the project's code and for content (Godot itself is MIT). Decide before outside

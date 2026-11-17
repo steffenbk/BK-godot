@@ -56,8 +56,14 @@ The game project will be a separate repo (`game/`) that uses this engine. It doe
 - Jolt physics is compiled in, but only editor-created projects default to it. The game's
   `project.godot` must set `physics/3d/physics_engine = "Jolt Physics"` explicitly.
 - Jolt has heightmap and concave-mesh shapes (`modules/jolt_physics/shapes/`).
-- Godot's `modules/multiplayer` has a spawner, a synchronizer and RPCs. Nothing for terrain-edit
-  sync, late joiners or interest management, so that's custom work.
+- Godot's `modules/multiplayer` has a spawner, a synchronizer and RPCs. Interest management has
+  primitives only: per-peer visibility on `MultiplayerSynchronizer` (`add_visibility_filter`,
+  `set_visibility_for`); the relevance policy is ours. Synchronizer state above `sync_mtu`
+  (1350 bytes default) is dropped, not split.
+- Voxel Tools' network sync (`VoxelTerrainMultiplayerSynchronizer`) works only with `VoxelTerrain`
+  (fixed LOD). `VoxelLodTerrain` has no network support in v1.7. `VoxelTerrain` view distance is
+  capped at 512 voxels on unbounded volumes (`voxel_terrain.h:44`). See `docs/framework-spec.md` §7.
+- GDScript has no sandbox: mod scripts get full file, network and process access.
 - There's no voxel terrain in Godot core, which is why we use Voxel Tools.
 - The Windows build needs Godot's Direct3D 12 deps (`misc/scripts/install_d3d12_sdk_windows.py`).
   `bk/build.sh` installs them automatically. Under Git Bash they go to `bin/build_deps`.
