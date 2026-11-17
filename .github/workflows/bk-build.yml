@@ -1,0 +1,101 @@
+name: BK engine build
+
+# Upstream Godot's CI workflows were removed on this branch (they build every
+# platform and would burn CI minutes). This one builds what the project needs.
+
+on:
+  push:
+    branches: ["bk/**"]
+    tags: ["engine-v*"]
+  pull_request:
+    branches: ["bk/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SCONS_CACHE_LIMIT_GB: 7
+
+jobs:
+  build:
+    name: ${{ matrix.os_name }} ${{ matrix.variant }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os_name: linux,   runner: ubuntu-24.04, variant: editor }
+          - { os_name: linux,   runner: ubuntu-24.04, variant: editor-double }
+          - { os_name: linux,   runner: ubuntu-24.04, variant: template }
+          - { os_name: windows, runner: windows-2022, variant: editor }
+          - { os_name: windows, runner: windows-2022, variant: editor-double }
+          - { os_name: windows, runner: windows-2022, variant: template }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SCons
+        run: python -m pip install scons
+
+      - name: Install Linux build dependencies
+        if: matrix.os_name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libx11-dev libxcursor-dev \
+            libxinerama-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev \
+            libudev-dev libxi-dev libxrandr-dev libwayland-dev
+
+      - name: Restore SCons cache
+        uses: actions/cache@v4
+        with:
+          path: .scons_cache
+          key: scons-${{ matrix.os_name }}-${{ matrix.variant }}-${{ github.sha }}
+          restore-keys: |
+            scons-${{ matrix.os_name }}-${{ matrix.variant }}-
+
+      - name: Build
+        run: bk/build.sh ${{ matrix.variant }} cache_path="$GITHUB_WORKSPACE/.scons_cache" cache_limit=$SCONS_CACHE_LIMIT_GB
+
+      - name: Smoke test (required modules are compiled in)
+        if: matrix.os_name == 'linux' && startsWith(matrix.variant, 'editor')
+        run: |
+          BIN=$(ls bin/godot.linuxbsd.editor*.x86_64 | head -1)
+          "$BIN" --headless --script bk/check_modules.gd
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.os_name }}-${{ matrix.variant }}
+          path: |
+            bin/godot.*
+            !bin/obj
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/engine-v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Package and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          for d in */; do (cd "$d" && zip -qr "../${d%/}.zip" .); done
+          gh release create "$GITHUB_REF_NAME" *.zip --repo "$GITHUB_REPOSITORY" \
+            --title "Engine $GITHUB_REF_NAME" \
+            --notes "Godot 4.7.2-stable + Voxel Tools v1.7. Engine changes: see bk/CHANGES.md."
